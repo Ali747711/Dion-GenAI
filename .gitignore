@@ -1,0 +1,25 @@
+# Secrets — never commit
+keys.md
+.env
+.env.*
+!.env.example
+
+# Dependencies / builds
+node_modules/
+dist/
+coverage/
+*.log
+
+# Local data and generated media
+backend/storage/
+mock-storage-backup/
+music/
+checks/
+.playwright-mcp/
+
+# Original mascot PNGs (multi-MB); the app ships resized WebP copies in client/public/mascot/
+client/public/logo/
+
+# OS / editor
+.DS_Store
+.idea/
