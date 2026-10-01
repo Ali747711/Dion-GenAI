@@ -13,7 +13,12 @@ Write a brief and get two song variants back. You can also make covers, sound ef
 ![Express 5](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Drizzle-4169E1?logo=postgresql&logoColor=white)
 ![Tailwind 4](https://img.shields.io/badge/Tailwind-4-06B6D4?logo=tailwindcss&logoColor=white)
-![Tests](https://img.shields.io/badge/backend%20tests-126%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/backend%20tests-128%20passing-brightgreen)
+[![Frontend on Vercel](https://img.shields.io/badge/frontend-Vercel-000000?logo=vercel&logoColor=white)](https://dion-blond.vercel.app)
+[![Backend on Render](https://img.shields.io/badge/backend-Render-46E3B7?logo=render&logoColor=black)](https://dion-api.onrender.com/health/live)
+
+**[▶ Live demo: dion-blond.vercel.app](https://dion-blond.vercel.app)**<br/>
+<sub>A private, single-owner studio: visitors can look around, and creating requires the owner's sign-in. It runs in mock mode, so it never spends real credits.</sub>
 
 </div>
 
@@ -121,7 +126,8 @@ Other details:
 | Backend | Node.js, Express 5, TypeScript, Zod, express-session, argon2, busboy, pino |
 | Data | PostgreSQL, Drizzle ORM and drizzle-kit migrations |
 | AI provider | Noiz AI: text-to-music (YuE2), covers, lyric recognition, TTS, voice cloning and design, speech-to-text, emotion enhancement, text-to-sound |
-| Quality | Vitest, Supertest (126 backend tests), ESLint, Prettier, Playwright for browser checks |
+| Quality | Vitest, Supertest (128 backend tests), ESLint, Prettier, Playwright for browser checks |
+| Hosting | Vercel (frontend), Render (Docker web service and Postgres) |
 
 ## Project structure
 
@@ -188,10 +194,65 @@ cd client  && npm run typecheck && npm run lint && npm run build
 
 Tests always run against the mock provider and a separate test database. CI never sends a paid request.
 
+## Deployment
+
+```mermaid
+flowchart LR
+  B["Browser"] -- "https" --> V["Vercel<br/>static React build"]
+  V -- "rewrite /api/* · /health/*" --> R["Render web service (Docker)<br/>migrate → seed → API + worker"]
+  R --> P[("Render Postgres")]
+```
+
+| Part | Where | How |
+| --- | --- | --- |
+| Frontend | Vercel, `client/` | `client/vercel.json` builds with Vite, sends unknown routes to the app, and **rewrites `/api/*` to Render**, so the browser only ever talks to one origin. |
+| Backend | Render web service, `backend/` | `backend/Dockerfile` builds on Node 22 with ffmpeg. `npm run start:all` runs migrations, seeds the budget, then starts the API and worker in **one process**. |
+| Database | Render Postgres | Connected through the internal `DATABASE_URL`. |
+
+Because Vercel proxies the API, the session cookie belongs to the frontend's own domain and can be `Secure; HttpOnly; SameSite=Lax` with no cross-site cookie setup. The backend trusts exactly one proxy hop (`TRUST_PROXY=1`), so Express sees https and real client addresses. Without that setting, express-session silently drops `Secure` cookies; a regression test now guards against that.
+
+**Production environment** (set as Render secrets, never committed):
+
+| Variable | Value |
+| --- | --- |
+| `DATABASE_URL` | Render Postgres internal URL |
+| `SESSION_SECRET` | 32+ random bytes |
+| `OWNER_PASSWORD_HASH` | output of `npm run hash-password -- "<password>"` |
+| `NODE_ENV` | `production` |
+| `COOKIE_SECURE` | `true` |
+| `TRUST_PROXY` | `1` |
+| `NOIZ_MODE` | `mock`, or `live` with `NOIZ_API_KEY` |
+
+**Deploying with the CLIs:**
+
+```bash
+# Backend: Render CLI (create the database first, then the Docker web service)
+render ea pg create --name dion-db --plan free --region singapore
+render services create --name dion-api --type web_service --runtime docker \
+  --repo https://github.com/Ali747711/Dion-GenAI --branch main --root-directory backend \
+  --plan free --region singapore --health-check-path /health/ready \
+  --env-var NODE_ENV=production --env-var COOKIE_SECURE=true --env-var TRUST_PROXY=1 \
+  --env-var NOIZ_MODE=mock --env-var SESSION_SECRET=... --env-var OWNER_PASSWORD_HASH=...
+# Then add DATABASE_URL (the internal URL) in the Render dashboard.
+
+# Frontend: Vercel CLI
+cd client && vercel link --project dion && vercel deploy --prod
+```
+
+Pushes to `main` redeploy the backend automatically. **Smoke test after a deploy:** check the `Secure` session cookie, sign in, run a mock song through to `succeeded`, make a Range request for the audio (206), and confirm signed-out API calls get 401.
+
+**Free-tier limits of the demo:**
+- **Slow first visit:** the Render service sleeps when idle, so the first request takes up to about a minute to wake it.
+- **Audio isn't kept:** stored audio lives on the container's disk and is lost when the service restarts.
+- **Temporary database:** the free Postgres database expires after 30 days.
+
+A paid plan with a persistent disk, or S3-compatible storage, removes these limits.
+
 ## Status and roadmap
 
 - ✅ **Music core.** Composer, two variants, durable jobs, library, projects, player, budget ledger, private sign-in.
 - ✅ **Audio studio.** Covers, lyric recognition, sound, speech, voices, transcription, USD cap.
+- ✅ **Deployed.** Frontend on Vercel and backend on Render, in mock mode. An independent security review ran before launch, and its findings were fixed with tests.
 - 🔄 **Live validation.** The live adapters are built from the Noiz docs and tested with simulated responses. Their error handling has been checked against the real API. Paid generation is the next step to verify.
 - 🔜 **Visual assets.** Artwork and short videos for tracks, with cost previews for each model.
 - 🔜 **Composed workflows.** Video dubbing, podcast narration and character voices, each enabled only after its own scope and budget review.
