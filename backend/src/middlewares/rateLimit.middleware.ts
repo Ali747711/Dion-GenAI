@@ -7,7 +7,22 @@ const rateLimitedHandler = (_req: Request, _res: Response, next: NextFunction): 
   next(new AppError(ErrorCode.RATE_LIMITED, Message.RATE_LIMITED, { retryable: true }));
 };
 
-/** POST /api/v1/session (login) — brute-force protection. */
+/**
+ * Global cap on FAILED logins, independent of client IP. Behind a proxy the
+ * visible IP is the proxy's (shared), and a direct caller can pick its own, so
+ * per-IP limits alone cannot stop brute force against the single owner password.
+ */
+export const globalFailedLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  keyGenerator: () => "owner-login",
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitedHandler,
+});
+
+/** POST /api/v1/session (login) — per-client brute-force protection. */
 export const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,

@@ -13,6 +13,9 @@ export const sessionMiddleware = session({
   resave: false,
   saveUninitialized: true,
   rolling: true,
+  // Behind TLS-terminating proxies (Render edge, Vercel rewrite) express-session
+  // must trust X-Forwarded-Proto, or it silently drops Secure cookies.
+  proxy: env.TRUST_PROXY > 0 ? true : undefined,
   cookie: {
     httpOnly: true,
     sameSite: "lax",

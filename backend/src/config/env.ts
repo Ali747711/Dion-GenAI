@@ -15,6 +15,9 @@ const envSchema = z.object({
   OWNER_NAME: z.string().min(1).default("Owner"),
 
   COOKIE_SECURE: coerceBoolean(false),
+  // Number of reverse proxies in front of the API (e.g. Vercel rewrite + Render = 2).
+  // Needed so secure cookies are issued and rate limits key on the client IP.
+  TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
 
   NOIZ_MODE: z.enum(["mock", "live"]).default("mock"),
   NOIZ_BASE_URL: z.string().url().default("https://noiz.ai/v1"),
@@ -29,7 +32,17 @@ const envSchema = z.object({
 
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
 
-  CORS_ORIGIN: z.string().optional(),
+  // Normally unset: the client is served same-origin (Vite proxy / Vercel rewrite).
+  // When set, it must be one exact origin — credentials are allowed for it.
+  CORS_ORIGIN: z
+    .string()
+    .url()
+    .refine((value) => {
+      const url = new URL(value);
+      const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+      return (url.protocol === "https:" || local) && url.origin === value.replace(/\/$/, "");
+    }, "CORS_ORIGIN must be one exact https origin (or http://localhost) with no path or wildcard")
+    .optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -11,6 +11,7 @@
     "build": "tsc -p tsconfig.json",
     "start:api": "node dist/server.js",
     "start:worker": "node dist/worker.js",
+    "start:all": "node dist/db/migrate.js && node dist/scripts/seed.js && node dist/all.js",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
     "lint": "eslint src tests",
     "test": "LOG_LEVEL=silent vitest run",
